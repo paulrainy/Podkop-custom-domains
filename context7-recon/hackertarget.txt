@@ -1,0 +1,6 @@
+context7.com
+accounts.context7.com
+clerk.context7.com
+mcp.context7.com
+mcpbeta.context7.com
+www.context7.com

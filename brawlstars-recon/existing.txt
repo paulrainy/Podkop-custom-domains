@@ -1,0 +1,6 @@
+brawlstars.inbox.supercell.com
+game.brawlstarsgame.com
+id.supercell.com
+inventory.mtech.supercell.com
+o315582.ingest.sentry.io
+y8obqk.launches.appsflyersdk.com

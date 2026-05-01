@@ -1,0 +1,3 @@
+game-assets.brawlstarsgame.com
+game.brawlstarsgame.com
+grafana.oregon.prod.brawlstarsgame.com
