@@ -1,0 +1,5 @@
+api-cdn.figma.com
+click.figma.com
+figma.com
+static.figma.com
+www.figma.com
