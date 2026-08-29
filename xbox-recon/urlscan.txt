@@ -1,10 +1,7 @@
-click.engage.xbox.com
+dashcontentverification.xbox.com
+fraudprotection.support.xbox.com
 gear.xbox.com
-local.play.xbox.com
-marketplace.xbox.com
-news.xbox.com
-playxbox.com
+ppe.support-refunds.xbox.com
 support.xbox.com
-www.playxbox.com
 www.xbox.com
 xbox.com

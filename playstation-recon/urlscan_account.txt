@@ -1,0 +1,5 @@
+ca.account.sony.com
+click.direct.account.sony.com
+click.txn-email.account.sony.com
+my.account.sony.com
+skw.eve.account.sony.com

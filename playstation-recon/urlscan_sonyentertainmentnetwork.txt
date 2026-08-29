@@ -1,0 +1,4 @@
+account.sonyentertainmentnetwork.com
+auth.api.sonyentertainmentnetwork.com
+id.sonyentertainmentnetwork.com
+sonyentertainmentnetwork.com

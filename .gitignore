@@ -1,3 +1,5 @@
 amass_dir
 .venv
 .idea
+.claude
+__pycache__/

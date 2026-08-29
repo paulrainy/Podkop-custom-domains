@@ -1,0 +1,15 @@
+b0.ww.np.dl.playstation.net
+controller.dl.playstation.net
+dashboards.playstation.net
+develop.playstation.net
+ena.net.playstation.net
+gst.prod.dl.playstation.net
+help.sit.pt.playstation.net
+kfscdn.api.np.km.playstation.net
+licensing.dev.pt.playstation.net
+onboarding.rnps.dl.playstation.net
+oqesn.np.dl.playstation.net
+ps4-system.sec.np.dl.playstation.net
+signin.playstation.net
+signin.sit.pt.playstation.net
+zeus.dl.playstation.net

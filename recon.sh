@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # recon.sh — domain recon pipeline
-# Usage: ./recon.sh <domain> [output_dir] [--diff]
+# Usage: ./recon.sh <domain> [output_dir] [--diff] [--force]
 # Example: ./recon.sh context7.com ./results
 # Example: ./recon.sh context7.com ./results --diff
+#
+# Exit codes: 0 = ok, 2 = new domains found (--diff), 3 = run refused
+# (no candidates collected, or DNS validation collapsed — see RECON_MIN_RETAIN).
 
 set -euo pipefail
 
@@ -17,18 +20,33 @@ err()     { echo -e "${RED}[-]${RESET} $*"; }
 section() { echo -e "\n${BOLD}${CYAN}══ $* ══${RESET}"; }
 
 # ── curl with retry/backoff ───────────────────────────────────────────────────
-# curl_retry <max_time_seconds> <url> <outfile>
-# 3 attempts, backoff 1s then 2s. Succeeds only on HTTP 2xx + non-empty body.
+# curl_retry <max_time_seconds> <max_attempts> <url> <outfile> [header ...]
+# Succeeds only on HTTP 2xx + non-empty body. Backoff doubles from 1s.
+# A 4xx is never retried: it means auth is required (certspotter, OTX) or we
+# are already being throttled, and neither changes within a run — retrying a
+# 429 only deepens the throttle while burning the wall-clock budget.
 curl_retry() {
-    local max_time="$1" url="$2" outfile="$3"
+    local max_time="$1" max_attempts="$2" url="$3" outfile="$4"
+    shift 4
+    local hdr_args=() h
+    for h in "$@"; do hdr_args+=(-H "$h"); done
     local attempt delay=1 code
-    for attempt in 1 2 3; do
-        code=$(curl -s --max-time "$max_time" -o "$outfile" -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+    for (( attempt = 1; attempt <= max_attempts; attempt++ )); do
+        # No --compressed: certspotter's body is always cut off mid-stream, and
+        # a truncated gzip stream decompresses to nothing at all, while a
+        # truncated plain body still parses into usable partial results.
+        code=$(curl -s --max-time "$max_time" \
+                    "${hdr_args[@]+"${hdr_args[@]}"}" \
+                    -o "$outfile" -w '%{http_code}' "$url" 2>/dev/null || echo "000")
         if [[ "$code" =~ ^2 ]] && [[ -s "$outfile" ]]; then
             return 0
         fi
-        if [[ $attempt -lt 3 ]]; then
-            warn "  retry $attempt/3 (http $code) in ${delay}s ..."
+        if [[ "$code" =~ ^4 ]]; then
+            warn "  http $code — not retrying"
+            return 1
+        fi
+        if [[ $attempt -lt $max_attempts ]]; then
+            warn "  retry $attempt/$max_attempts (http $code) in ${delay}s ..."
             sleep "$delay"
             delay=$((delay * 2))
         fi
@@ -65,10 +83,13 @@ append_unique() {
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 DIFF_MODE=false
+FORCE=false
 ARGS=()
 for arg in "$@"; do
     if [[ "$arg" == "--diff" ]]; then
         DIFF_MODE=true
+    elif [[ "$arg" == "--force" ]]; then
+        FORCE=true
     else
         ARGS+=("$arg")
     fi
@@ -76,7 +97,7 @@ done
 set -- "${ARGS[@]+"${ARGS[@]}"}"
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <domain> [output_dir] [--diff]"
+    echo "Usage: $0 <domain> [output_dir] [--diff] [--force]"
     echo "Example: $0 context7.com ./results --diff"
     exit 1
 fi
@@ -180,7 +201,7 @@ run_crtsh() {
     section "crt.sh (Certificate Transparency)"
     info "Querying crt.sh for %.$DOMAIN ..."
     local tmp; tmp=$(mktemp)
-    if curl_retry 15 "https://crt.sh/?q=%25.${DOMAIN}&output=json" "$tmp"; then
+    if curl_retry 12 2 "https://crt.sh/?q=%25.${DOMAIN}&output=json" "$tmp"; then
         if jq -e '.[0]' "$tmp" &>/dev/null; then
             jq -r '.[].name_value' "$tmp" 2>/dev/null \
                 | tr ',' '\n' \
@@ -202,9 +223,18 @@ run_crtsh() {
 
 run_certspotter() {
     section "Certspotter API"
-    info "Querying certspotter.com for $DOMAIN ..."
     local tmp; tmp=$(mktemp)
-    if curl_retry 15 "https://api.certspotter.com/v1/issuances?domain=${DOMAIN}&include_subdomains=true&expand=dns_names" "$tmp"; then
+    local hdr=()
+    if [[ -n "${CERTSPOTTER_API_KEY:-}" ]]; then
+        info "Querying certspotter.com for $DOMAIN (authenticated) ..."
+        hdr=("Authorization: Bearer ${CERTSPOTTER_API_KEY}")
+    else
+        # Unauthenticated the endpoint trickles the body out and never finishes
+        # (measured: 20 KB in 120 s, then a truncated-JSON parse error). One
+        # bounded attempt; whatever arrives is still usable candidates.
+        info "Querying certspotter.com for $DOMAIN (no CERTSPOTTER_API_KEY — partial results) ..."
+    fi
+    if curl_retry 20 1 "https://api.certspotter.com/v1/issuances?domain=${DOMAIN}&include_subdomains=true&expand=dns_names" "$tmp" "${hdr[@]+"${hdr[@]}"}"; then
         jq -r '.[].dns_names[]' "$tmp" 2>/dev/null \
             | grep -F "$DOMAIN" \
             | sed 's/^\*\.//' \
@@ -212,7 +242,7 @@ run_certspotter() {
             | sort -u > "$OUTDIR/certspotter.txt" || true
         ok "certspotter: $(wc -l < "$OUTDIR/certspotter.txt") domains"
     else
-        warn "certspotter: all retries failed"
+        warn "certspotter: request failed"
         touch "$OUTDIR/certspotter.txt"
     fi
     rm -f "$tmp"
@@ -222,7 +252,7 @@ run_hackertarget() {
     section "HackerTarget API"
     info "Querying hackertarget.com for $DOMAIN ..."
     local tmp; tmp=$(mktemp)
-    if curl_retry 15 "https://api.hackertarget.com/hostsearch/?q=${DOMAIN}" "$tmp"; then
+    if curl_retry 15 3 "https://api.hackertarget.com/hostsearch/?q=${DOMAIN}" "$tmp"; then
         cut -d',' -f1 "$tmp" \
             | grep -F "$DOMAIN" \
             | sort -u > "$OUTDIR/hackertarget.txt" || true
@@ -238,7 +268,7 @@ run_urlscan() {
     section "URLScan.io"
     info "Querying urlscan.io for $DOMAIN ..."
     local tmp; tmp=$(mktemp)
-    if curl_retry 15 "https://urlscan.io/api/v1/search/?q=domain:${DOMAIN}&size=100" "$tmp"; then
+    if curl_retry 15 3 "https://urlscan.io/api/v1/search/?q=domain:${DOMAIN}&size=100" "$tmp"; then
         jq -r '.results[].task.domain' "$tmp" 2>/dev/null \
             | grep -F "$DOMAIN" \
             | sort -u > "$OUTDIR/urlscan.txt" || true
@@ -254,7 +284,7 @@ run_wayback() {
     section "Wayback Machine (web.archive.org)"
     info "Querying Wayback CDX API for *.$DOMAIN ..."
     local tmp; tmp=$(mktemp)
-    if curl_retry 20 "http://web.archive.org/cdx/search/cdx?url=*.${DOMAIN}/*&output=text&fl=original&collapse=urlkey&limit=5000" "$tmp"; then
+    if curl_retry 20 2 "http://web.archive.org/cdx/search/cdx?url=*.${DOMAIN}/*&output=text&fl=original&collapse=urlkey&limit=5000" "$tmp"; then
         grep -oE "[a-z0-9._-]+\.${DOMAIN//./\\.}" "$tmp" \
             | sort -u > "$OUTDIR/wayback.txt" || true
         ok "wayback: $(wc -l < "$OUTDIR/wayback.txt") domains"
@@ -267,9 +297,16 @@ run_wayback() {
 
 run_alienvault() {
     section "AlienVault OTX"
+    # Anonymous access to this endpoint now returns 429 unconditionally
+    # ("Please authenticate"), so without a key it is pure wasted wall-clock.
+    if [[ -z "${OTX_API_KEY:-}" ]]; then
+        info "Skipping AlienVault OTX (set OTX_API_KEY to enable — anonymous access is refused)"
+        touch "$OUTDIR/alienvault.txt"
+        return 0
+    fi
     info "Querying AlienVault OTX for $DOMAIN ..."
     local tmp; tmp=$(mktemp)
-    if curl_retry 15 "https://otx.alienvault.com/api/v1/indicators/domain/${DOMAIN}/passive_dns" "$tmp"; then
+    if curl_retry 15 2 "https://otx.alienvault.com/api/v1/indicators/domain/${DOMAIN}/passive_dns" "$tmp" "X-OTX-API-KEY: ${OTX_API_KEY}"; then
         jq -r '.passive_dns[].hostname' "$tmp" 2>/dev/null \
             | grep -F "$DOMAIN" \
             | sort -u > "$OUTDIR/alienvault.txt" || true
@@ -285,7 +322,7 @@ run_rapiddns() {
     section "RapidDNS.io"
     info "Querying rapiddns.io for $DOMAIN ..."
     local tmp; tmp=$(mktemp)
-    if curl_retry 20 "https://rapiddns.io/subdomain/${DOMAIN}?full=1" "$tmp"; then
+    if curl_retry 20 3 "https://rapiddns.io/subdomain/${DOMAIN}?full=1" "$tmp"; then
         grep -oE "[a-zA-Z0-9._-]+\.${DOMAIN//./\\.}" "$tmp" \
             | sort -u > "$OUTDIR/rapiddns.txt" || true
         ok "rapiddns: $(wc -l < "$OUTDIR/rapiddns.txt") domains"
@@ -343,47 +380,95 @@ rm -rf "$OUTDIR/.logs" "$OUTDIR/.dnsrecords.candidates"
 # ── Deduplicate raw list ───────────────────────────────────────────────────────
 section "Deduplication"
 sort -u "$RAW" -o "$RAW"
-TOTAL=$(wc -l < "$RAW")
+TOTAL=$(wc -l < "$RAW" | tr -d ' ')
 ok "Total unique candidates: $TOTAL"
 
-# ── Snapshot previous result (for --diff) before it gets overwritten ─────────
+# ── DNS validation via dnsx ────────────────────────────────────────────────────
+section "DNS validation (dnsx)"
+
+# Every source failing leaves an empty candidate pool. Validating it would
+# "succeed" with zero results and wipe the deliverable, so stop here instead.
+if [[ "$TOTAL" -eq 0 ]]; then
+    err "No candidates collected — every source failed. Existing results left untouched."
+    exit 3
+fi
+
+DNSX_THREADS="${RECON_DNSX_THREADS:-100}"
+DNSX_RETRY="${RECON_DNSX_RETRY:-3}"
+DNSX_ARGS=(-l "$RAW" -silent -resp -t "$DNSX_THREADS" -retry "$DNSX_RETRY")
+[[ -n "${RECON_DNSX_RESOLVERS:-}" ]] && DNSX_ARGS+=(-r "$RECON_DNSX_RESOLVERS")
+[[ -n "${RECON_DNSX_RATELIMIT:-}" ]] && DNSX_ARGS+=(-rl "$RECON_DNSX_RATELIMIT")
+
+info "Validating $TOTAL candidates (threads=$DNSX_THREADS, retry=$DNSX_RETRY) ..."
+
+# One pass, not two. all_domains.txt is derived from the -resp output rather
+# than from a second dnsx run, so the two files cannot disagree, and the
+# resolver sees half the query volume — the doubled volume is what got us
+# throttled into producing an empty list before.
+TMP_IPS="$OUTDIR/.all_domains_with_ip.new"
+TMP_DOMAINS="$OUTDIR/.all_domains.new"
+dnsx "${DNSX_ARGS[@]}" 2>/dev/null \
+    | sed 's/\x1b\[[0-9;]*m//g' \
+    | sort -u \
+    > "$TMP_IPS"
+awk '{print $1}' "$TMP_IPS" | sort -u > "$TMP_DOMAINS"
+
+ALIVE=$(wc -l < "$TMP_DOMAINS" | tr -d ' ')
+DEAD=$((TOTAL - ALIVE))
+
+# ── Retention guard ───────────────────────────────────────────────────────────
+# dnsx exits 0 even when it resolves nothing, so `set -e` never fires and a
+# throttled resolver would silently replace a good Podkop list with an empty
+# one. Refuse the write unless the new list keeps at least RECON_MIN_RETAIN
+# percent of the previous one.
+MIN_RETAIN="${RECON_MIN_RETAIN:-50}"
+PREV_ALIVE=0
+[[ -f "$OUTDIR/all_domains.txt" ]] && PREV_ALIVE=$(wc -l < "$OUTDIR/all_domains.txt" | tr -d ' ')
+
+if [[ "$FORCE" != true && "$PREV_ALIVE" -gt 0 && $(( ALIVE * 100 )) -lt $(( PREV_ALIVE * MIN_RETAIN )) ]]; then
+    mv "$TMP_DOMAINS" "$OUTDIR/all_domains.rejected.txt"
+    rm -f "$TMP_IPS"
+    err "DNS validation collapsed: $ALIVE alive vs $PREV_ALIVE previously (below ${MIN_RETAIN}%)."
+    err "Existing results left untouched. Suspect output: $OUTDIR/all_domains.rejected.txt"
+    err "This is almost always a throttled resolver, not real domain death — re-run later."
+    err "Override with --force, or lower the bar with RECON_MIN_RETAIN=<percent>."
+    exit 3
+fi
+rm -f "$OUTDIR/all_domains.rejected.txt"
+
+# Snapshot the previous result only now that the new one has passed the guard,
+# so a rejected run can never clobber the last known-good list.
 HAVE_PREV=false
 if [[ -f "$OUTDIR/all_domains.txt" ]]; then
     cp "$OUTDIR/all_domains.txt" "$OUTDIR/all_domains.prev.txt"
     HAVE_PREV=true
 fi
-
-# ── DNS validation via dnsx ────────────────────────────────────────────────────
-section "DNS validation (dnsx)"
-info "Validating $TOTAL candidates ..."
-
-dnsx -l "$RAW" -silent -resp 2>/dev/null \
-    | sed 's/\x1b\[[0-9;]*m//g' \
-    | sort -u \
-    > "$OUTDIR/all_domains_with_ip.txt"
-
-dnsx -l "$RAW" -silent 2>/dev/null \
-    | sort -u \
-    > "$OUTDIR/all_domains.txt"
-
-ALIVE=$(wc -l < "$OUTDIR/all_domains.txt")
-DEAD=$((TOTAL - ALIVE))
+mv "$TMP_IPS" "$OUTDIR/all_domains_with_ip.txt"
+mv "$TMP_DOMAINS" "$OUTDIR/all_domains.txt"
 
 ok "Alive: $ALIVE  |  Dead (no DNS): $DEAD"
 
 # ── Diff vs previous run ───────────────────────────────────────────────────────
 NEW_COUNT=0
+GONE_COUNT=0
 if [[ "$DIFF_MODE" == true ]]; then
     section "Diff vs previous run"
     if [[ "$HAVE_PREV" == true ]]; then
         comm -13 <(sort -u "$OUTDIR/all_domains.prev.txt") <(sort -u "$OUTDIR/all_domains.txt") > "$OUTDIR/all_domains.new.txt"
         comm -23 <(sort -u "$OUTDIR/all_domains.prev.txt") <(sort -u "$OUTDIR/all_domains.txt") > "$OUTDIR/all_domains.gone.txt"
-        NEW_COUNT=$(wc -l < "$OUTDIR/all_domains.new.txt")
+        NEW_COUNT=$(wc -l < "$OUTDIR/all_domains.new.txt" | tr -d ' ')
+        GONE_COUNT=$(wc -l < "$OUTDIR/all_domains.gone.txt" | tr -d ' ')
         if [[ "$NEW_COUNT" -gt 0 ]]; then
             ok "New domains since last run ($NEW_COUNT):"
             cat "$OUTDIR/all_domains.new.txt"
         else
             info "No new domains since last run."
+        fi
+        # A net loss is a signal too: the exit code only ever reported gains,
+        # so a run that shed thousands of domains and gained none looked
+        # identical to a clean no-op.
+        if [[ "$GONE_COUNT" -gt 0 ]]; then
+            warn "Domains gone since last run ($GONE_COUNT) — see all_domains.gone.txt"
         fi
     else
         info "No previous run found — nothing to diff."
@@ -407,15 +492,18 @@ echo "  certspotter.txt          — certspotter raw output"
 echo "  hackertarget.txt         — hackertarget raw output"
 echo "  urlscan.txt              — urlscan raw output"
 echo "  wayback.txt              — wayback machine raw output"
-echo "  alienvault.txt           — alienvault otx raw output"
+echo "  alienvault.txt           — alienvault otx raw output (needs OTX_API_KEY)"
 echo "  rapiddns.txt             — rapiddns.io raw output"
 if [[ "$DIFF_MODE" == true ]]; then
-    echo "  all_domains.new.txt      — domains new since previous run"
-    [[ "$HAVE_PREV" == true ]] && echo "  all_domains.gone.txt     — domains gone since previous run"
+    echo "  all_domains.new.txt      — $NEW_COUNT domains new since previous run"
+    [[ "$HAVE_PREV" == true ]] && echo "  all_domains.gone.txt     — $GONE_COUNT domains gone since previous run"
 fi
 echo ""
-echo -e "${BOLD}Live domains:${RESET}"
-cat "$OUTDIR/all_domains.txt"
+# Dumping the whole list flooded the terminal (atlassian.net alone is ~34k
+# lines of wildcard DNS); the file is right there if you want all of it.
+echo -e "${BOLD}Live domains (first 50 of $ALIVE):${RESET}"
+head -n 50 "$OUTDIR/all_domains.txt"
+[[ "$ALIVE" -gt 50 ]] && echo "  ... $((ALIVE - 50)) more in $OUTDIR/all_domains.txt"
 echo ""
 ok "Done. Use ${BOLD}${OUTDIR}/all_domains.txt${RESET} for Podkop."
 
