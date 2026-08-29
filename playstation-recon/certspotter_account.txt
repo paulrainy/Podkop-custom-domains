@@ -1,0 +1,17 @@
+acm.account.sony.com
+ca.account.sony.com
+d1-pmgt.account.sony.com
+e1-np.account.sony.com
+e1-pmgt.account.sony.com
+e1-pqa.account.sony.com
+e1-spint.account.sony.com
+image.txn-email.account.sony.com
+link.account.sony.com
+ltip-ca.account.sony.com
+mgmt.account.sony.com
+mk.acm.account.sony.com
+my.account.sony.com
+prod-qa.account.sony.com
+skw.eve.account.sony.com
+sky-srlc.account.sony.com
+sp-int.account.sony.com

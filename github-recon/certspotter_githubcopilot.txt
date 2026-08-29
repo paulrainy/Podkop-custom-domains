@@ -1,0 +1,4 @@
+business.githubcopilot.com
+enterprise.githubcopilot.com
+githubcopilot.com
+individual.githubcopilot.com

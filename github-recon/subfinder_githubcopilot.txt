@@ -1,0 +1,10 @@
+api.business.githubcopilot.com
+api.enterprise.githubcopilot.com
+api.individual.githubcopilot.com
+business.githubcopilot.com
+enterprise.githubcopilot.com
+individual.githubcopilot.com
+mail.githubcopilot.com
+proxy.enterprise.githubcopilot.com
+proxy.individual.githubcopilot.com
+telemetry.individual.githubcopilot.com

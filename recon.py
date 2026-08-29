@@ -604,6 +604,19 @@ def read_targets(mapfile: Path) -> list[tuple[str, list[str]]]:
     return targets
 
 
+def root_suffixes(domains: list[str]) -> list[str]:
+    """Per-source file suffixes for a multi-root target, in the order given.
+
+    The root's first label is enough for supercell.com + brawlstarsgame.com,
+    but not for playstation.com + playstation.net — both claim "playstation",
+    and the second root would silently overwrite the first one's files. A
+    colliding label falls back to the whole domain with dots turned into dashes.
+    """
+    labels = [d.split(".")[0] for d in domains]
+    return [lab if labels.count(lab) == 1 else d.replace(".", "-")
+            for d, lab in zip(domains, labels, strict=True)]
+
+
 async def update_multiroot(folder: str, domains: list[str], root: Path, st: Settings) -> Outcome:
     """Multi-root target: one recon per root domain, merged into one folder.
 
@@ -620,7 +633,7 @@ async def update_multiroot(folder: str, domains: list[str], root: Path, st: Sett
 
     import tempfile
 
-    for d in domains:
+    for d, suffix in zip(domains, root_suffixes(domains), strict=True):
         with tempfile.TemporaryDirectory() as tmp:
             scratch = Path(tmp)
             try:
@@ -632,7 +645,6 @@ async def update_multiroot(folder: str, domains: list[str], root: Path, st: Sett
             if outcome.exit_code not in (0, 2):
                 warn(f"{folder}/{d}: recon exited with code {outcome.exit_code}")
                 any_failed = True
-            suffix = d.split(".")[0]
             for name in SOURCE_NAMES:
                 src = scratch / f"{name}.txt"
                 if src.exists() and src.stat().st_size:

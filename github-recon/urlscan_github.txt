@@ -1,0 +1,16 @@
+api.github.com
+cdn-185-199-111-133.github.com
+github.com
+lb-140-82-112-3-iad.github.com
+lb-140-82-112-5-iad.github.com
+lb-140-82-112-6-iad.github.com
+lb-140-82-113-3-iad.github.com
+lb-140-82-113-4-iad.github.com
+lb-140-82-113-6-iad.github.com
+lb-140-82-114-3-iad.github.com
+lb-140-82-114-4-iad.github.com
+lb-140-82-114-6-iad.github.com
+lb-140-82-121-3-fra.github.com
+lb-140-82-121-4-fra.github.com
+lb-140-82-121-5-fra.github.com
+lb-140-82-121-6-fra.github.com

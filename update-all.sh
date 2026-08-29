@@ -73,6 +73,24 @@ count_lines() { [[ -f "$1" ]] && wc -l < "$1" | tr -d ' ' || echo 0; }
 
 # ── One target, start to finish. Writes "<status> <new> <gone>" to $2. ────────
 # status: ok | new | refused | failed
+# Echoes one per-source file suffix per domain, in the order given.
+#
+# The root's first label is enough for supercell.com + brawlstarsgame.com, but
+# not for playstation.com + playstation.net — both claim "playstation", and the
+# second root would silently overwrite the first one's files. A colliding label
+# falls back to the whole domain with dots turned into dashes.
+root_suffixes() {
+    local d j lbl collide
+    for d in "$@"; do
+        lbl="${d%%.*}"
+        collide=false
+        for j in "$@"; do
+            [[ "$j" != "$d" && "${j%%.*}" == "$lbl" ]] && collide=true
+        done
+        if [[ "$collide" == true ]]; then printf '%s\n' "${d//./-}"; else printf '%s\n' "$lbl"; fi
+    done
+}
+
 update_target() {
     local folder="$1" status_file="$2"; shift 2
     local domains=("$@")
@@ -104,8 +122,11 @@ update_target() {
     local ips_new="$target_dir/all_domains_with_ip.txt.new"
     : > "$raw_new"; : > "$domains_new"; : > "$ips_new"
 
-    local d rc any_failed=false tmp suffix f
-    for d in "${domains[@]}"; do
+    local d rc any_failed=false tmp suffix f i
+    local sfx=()
+    while IFS= read -r suffix; do sfx+=("$suffix"); done < <(root_suffixes "${domains[@]}")
+    for i in $(seq 0 $(( ${#domains[@]} - 1 ))); do
+        d="${domains[$i]}"
         tmp=$(mktemp -d)
         rc=0
         RECON_SKIP_DEPCHECK=1 "$RECON" "$d" "$tmp" </dev/null || rc=$?
@@ -115,7 +136,7 @@ update_target() {
             warn "$folder/$d: recon.sh exited with code $rc"
             any_failed=true
         fi
-        suffix="${d%%.*}"
+        suffix="${sfx[$i]}"
         for f in subfinder crtsh certspotter hackertarget urlscan wayback alienvault rapiddns; do
             [[ -s "$tmp/$f.txt" ]] && cp "$tmp/$f.txt" "$target_dir/${f}_${suffix}.txt"
         done
@@ -196,8 +217,10 @@ if [[ "$DRY_RUN" == true ]]; then
         if [[ ${#domains[@]} -eq 1 ]]; then
             info "Would run: $RECON ${domains[0]} $SCRIPT_DIR/${FOLDERS[$i]} --diff"
         else
-            for d in "${domains[@]}"; do
-                info "Would run: $RECON $d <scratch-dir>, merge into $SCRIPT_DIR/${FOLDERS[$i]} as *_${d%%.*}.txt"
+            sfx=()
+            while IFS= read -r s; do sfx+=("$s"); done < <(root_suffixes "${domains[@]}")
+            for k in $(seq 0 $(( ${#domains[@]} - 1 ))); do
+                info "Would run: $RECON ${domains[$k]} <scratch-dir>, merge into $SCRIPT_DIR/${FOLDERS[$i]} as *_${sfx[$k]}.txt"
             done
         fi
     done
