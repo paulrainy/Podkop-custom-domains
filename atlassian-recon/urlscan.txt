@@ -1,8 +1,12 @@
 atlassian.net
-bancodebogota.atlassian.net
 bank-muscat.atlassian.net
-binarydefense.atlassian.net
-formdepartment.atlassian.net
+cwcapital.atlassian.net
+ecosystem.atlassian.net
+finra.atlassian.net
+globebusiness.atlassian.net
+gsxsecurity.atlassian.net
+labora.atlassian.net
 lightcast-io.atlassian.net
-po.atlassian.net
-tpgsoc.atlassian.net
+messeberlin.atlassian.net
+migros-kunden.atlassian.net
+vivarailings.atlassian.net

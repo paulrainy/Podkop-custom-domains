@@ -1,0 +1,10 @@
+data-agent.analytics.supercell.com
+event.supercell.com
+goblin-dev.supercell.com
+ingame-webviews.supercell.com
+ingame.support.supercell.com
+main-website-dev.supercell.com
+report.mtech.supercell.com
+store.supercell.com
+supercell.com
+support.supercell.com

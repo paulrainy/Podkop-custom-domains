@@ -118,7 +118,6 @@ messenger-itms7.music.apple.com
 messenger-itms8.music.apple.com
 messenger.music.apple.com
 monitor.amp-api-edge.music.apple.com
-music.apple.com
 musicstatus.music.apple.com
 my.auth.music.apple.com
 my.liveradiobackup.music.apple.com
@@ -135,7 +134,6 @@ pd-buylite.music.apple.com
 pd-embed.music.apple.com
 pd-js-cdn.music.apple.com
 pd-messenger.music.apple.com
-pd-music.apple.com
 pd-musicstatus.music.apple.com
 pd-play.music.apple.com
 pd-replay.music.apple.com
@@ -147,7 +145,6 @@ pd11-buylite.music.apple.com
 pd11-embed.music.apple.com
 pd11-js-cdn.music.apple.com
 pd11-messenger.music.apple.com
-pd11-music.apple.com
 pd11-musicstatus.music.apple.com
 pd11-play.music.apple.com
 pd11-replay.music.apple.com
@@ -181,8 +178,10 @@ secure.liveradiobackup.music.apple.com
 shop.api.music.apple.com
 shop.embed.music.apple.com
 shop.liveradiobackup.music.apple.com
+siri-api-edge.music.apple.com
 siri-api.music.apple.com
 smtp.classical-api.music.apple.com
+sonos.music.apple.com
 speedybuy.music.apple.com
 speedysub.music.apple.com
 sql.auth.music.apple.com

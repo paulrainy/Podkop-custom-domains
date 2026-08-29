@@ -1,5 +1,4 @@
-api-cdn.figma.com
 click.figma.com
+desktop.figma.com
 figma.com
-static.figma.com
 www.figma.com

@@ -2,6 +2,8 @@ account.admin.figma.com
 account.figma-for-jira.figma.com
 admin.desktop.figma.com
 admin.figma.com
+ai-trace-dashboard.prod.figma.com
+ai-trace-dashboard.staging.figma.com
 alpha.fig-events.figma.com
 alpha.figma-for-jira.figma.com
 analytics.help.figma.com
@@ -14,6 +16,7 @@ artifactory-docker.prod.figma.com
 artifactory-docker.staging.figma.com
 artifactory.prod.figma.com
 artifactory.staging.figma.com
+as.staging.figma.com
 assets.api-cdn.figma.com
 autodiscover.admin.figma.com
 autodiscover.forum.figma.com
@@ -50,6 +53,7 @@ cortex-trace-viewer.prod.figma.com
 cortex-trace-viewer.staging.figma.com
 data.admin.figma.com
 db.admin.figma.com
+deploys.figma.com
 desktop.figma.com
 dev.developers.figma.com
 developers.figma.com
@@ -109,6 +113,8 @@ kubernetes.embed.figma.com
 kubernetes.figma.com
 live.figma-for-jira.figma.com
 login.admin.figma.com
+loupe.prod.figma.com
+loupe.staging.figma.com
 mail.figma-for-jira.figma.com
 mail.help.figma.com
 marketing.figma.com
@@ -134,6 +140,7 @@ preview.fig-events.figma.com
 preview.help.figma.com
 private.help.figma.com
 prod.help.figma.com
+production-noc-100.figma.com
 prometheus.developers.figma.com
 prometheus.help.figma.com
 psxid.figma.com
@@ -193,7 +200,6 @@ store.figma.com
 stream.figma-for-jira.figma.com
 stream.figma.com
 stream.help.figma.com
-styx.hostax.figma.com
 support.figma.com
 test.embed.figma.com
 tools.staging.figma.com
@@ -212,3 +218,6 @@ www.embed.figma.com
 www.figma-for-jira.figma.com
 www.figma.com
 www.staging-admin.figma.com
+zendesk1.figma.com
+zendesk2.figma.com
+zendesk4.figma.com
